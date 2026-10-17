@@ -17,4 +17,4 @@ venv/
 .ipynb_checkpoints/
 
 *.dump
-.pdf
+*.pdf
