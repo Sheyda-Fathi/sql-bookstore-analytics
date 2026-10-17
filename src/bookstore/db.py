@@ -1,18 +1,16 @@
-
 import os
 from contextlib import contextmanager
 import psycopg2
 from dotenv import load_dotenv
 
 load_dotenv()
-
+CONNECT_TIMEOUT_SECONDS = 5
 
 class DatabaseConfigError(Exception):
-    """database configuration is missing or invalid"""
-
+    """Database configuration is missing or invalid"""
 
 class DatabaseConnectionError(Exception):
-    """database connection fails"""
+    """The database could not be reached or the login was rejected"""
 
 
 def _get_database_settings():
@@ -30,8 +28,7 @@ def _get_database_settings():
         value = os.getenv(setting)
 
         if not value:
-            raise DatabaseConfigError(f"Missing database setting: {setting}" )
-
+            raise DatabaseConfigError(f"Missing database setting: {setting}")
         settings[setting] = value
 
     try:
@@ -50,28 +47,22 @@ def _get_database_settings():
 
 @contextmanager
 def get_connection():
+    """Open a connection; commit on success, roll back on error, always close"""
     settings = _get_database_settings()
-    connection = None
 
     try:
-        connection = psycopg2.connect(**settings)
+        connection = psycopg2.connect(connect_timeout=CONNECT_TIMEOUT_SECONDS, **settings)
+    except psycopg2.OperationalError as exc:
+        raise DatabaseConnectionError(f"Could not connect to the database: {exc}") from exc
+
+    try:
         yield connection
         connection.commit()
-
-    except psycopg2.Error as exc:
-        if connection is not None:
-            connection.rollback()
-
-        raise DatabaseConnectionError("Could not complete the database operation") from exc
-
     except Exception:
-        if connection is not None:
-            connection.rollback()
+        connection.rollback()
         raise
-
     finally:
-        if connection is not None:
-            connection.close()
+        connection.close()
 
 
 def fetch_all(query, params=None):
