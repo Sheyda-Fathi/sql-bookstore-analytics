@@ -1,6 +1,6 @@
-
-import pytest
 import psycopg2
+import pytest
+from psycopg2 import errors
 from src.bookstore.db import (DatabaseConfigError,DatabaseConnectionError,fetch_all,get_connection,)
 
 
@@ -30,3 +30,7 @@ def test_connection_error(monkeypatch):
     with pytest.raises(DatabaseConnectionError):
         with get_connection():
             pass
+
+def test_sql_error_is_not_reported_as_connection_error():
+    with pytest.raises(errors.DivisionByZero):
+        fetch_all("SELECT 1/0")
