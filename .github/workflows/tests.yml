@@ -1,0 +1,77 @@
+name: Tests
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: pytest (PostgreSQL 18, Python 3.14)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_DB: bookstore_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d bookstore_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: bookstore_test
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGDATABASE: bookstore_test
+      PGUSER: postgres
+      PGPASSWORD: postgres
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Check the PostgreSQL connection
+        run: psql -v ON_ERROR_STOP=1 -c "SELECT version();"
+
+      - name: Create the schema
+        run: psql -v ON_ERROR_STOP=1 -f sql/01_schema.sql
+
+      - name: Seed the data
+        run: python -m src.bookstore.seed
+
+      - name: Create the indexes
+        run: psql -v ON_ERROR_STOP=1 -f sql/02_indexes.sql
+
+      - name: Create the views and functions
+        run: psql -v ON_ERROR_STOP=1 -f sql/03_views_functions.sql
+
+      - name: Run the tests
+        run: python -m pytest -v
